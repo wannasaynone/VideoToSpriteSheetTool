@@ -4,7 +4,9 @@ Video to Sprite Sheet Converter
 將影片轉換成 Sprite Sheet 圖集的命令列工具
 
 使用方法:
-    python video_to_spritesheet.py input.mp4 -o output.png [選項]
+    python video_to_spritesheet.py [input] -o output.png [選項]
+    
+    若不指定 input，則自動遍歷當前資料夾內的所有影片檔
 """
 
 import argparse
@@ -241,51 +243,24 @@ def save_metadata(metadata, output_path):
     print(f"已儲存 metadata: {json_path}")
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="將影片轉換成 Sprite Sheet 圖集",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-範例:
-  %(prog)s video.mp4
-  %(prog)s video.mp4 -o spritesheet.png -f 15
-  %(prog)s video.mp4 -w 128 -H 128 -c 10
-  %(prog)s video.mp4 --start 0 --end 5 --json
-  %(prog)s video.mp4 --remove-bg -o transparent.png
-        """
-    )
+# 支援的影片格式
+VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".wmv", ".flv", ".m4v", ".mpeg", ".mpg"}
+
+
+def find_video_files(directory):
+    """在指定資料夾中搜尋所有影片檔案"""
+    video_files = []
+    dir_path = Path(directory)
     
-    parser.add_argument("input", help="輸入影片檔案路徑")
-    parser.add_argument("-o", "--output", default="spritesheet.png", help="輸出檔案名稱 (預設: spritesheet.png)")
-    parser.add_argument("-f", "--fps", type=float, default=10, help="抽取幀率 (預設: 10)")
-    parser.add_argument("-w", "--width", type=int, help="每幀寬度 (預設: 保持原始)")
-    parser.add_argument("-H", "--height", type=int, help="每幀高度 (預設: 保持原始)")
-    parser.add_argument("-c", "--columns", type=int, help="每行幾個幀 (預設: 自動計算)")
-    parser.add_argument("--start", type=float, help="起始時間 (秒)")
-    parser.add_argument("--end", type=float, help="結束時間 (秒)")
-    parser.add_argument("--max-frames", type=int, help="最大幀數限制")
-    parser.add_argument("--json", action="store_true", help="輸出 JSON metadata")
-    parser.add_argument("--remove-bg", action="store_true", help="移除背景 (需要安裝 rembg)")
+    for file_path in dir_path.iterdir():
+        if file_path.is_file() and file_path.suffix.lower() in VIDEO_EXTENSIONS:
+            video_files.append(file_path)
     
-    args = parser.parse_args()
-    
-    # 檢查輸入檔案
-    input_path = Path(args.input)
-    if not input_path.exists():
-        print(f"錯誤: 找不到輸入檔案 - {input_path}")
-        sys.exit(1)
-    
-    # 檢查 FFmpeg
-    check_ffmpeg()
-    
-    # 檢查 rembg
-    if args.remove_bg and not REMBG_AVAILABLE:
-        print("錯誤: 使用 --remove-bg 需要安裝 rembg")
-        print("執行以下其中一個指令:")
-        print('  pip install "rembg[cpu]"    # CPU 版本')
-        print('  pip install "rembg[gpu]"    # GPU 版本 (需要 NVIDIA/CUDA)')
-        sys.exit(1)
-    
+    return sorted(video_files)
+
+
+def process_single_video(input_path, output_path, args):
+    """處理單一影片檔案"""
     # 取得影片資訊
     print(f"輸入影片: {input_path}")
     video_info = get_video_info(input_path)
@@ -293,6 +268,18 @@ def main():
     print(f"影片長度: {video_info['duration']:.2f} 秒")
     print(f"影片 FPS: {video_info['fps']:.2f}")
     print()
+    
+    # 計算縮放後的尺寸
+    frame_width = args.width
+    frame_height = args.height
+    
+    # 若指定了百分比縮放，則覆蓋寬高設定
+    if args.percent is not None:
+        scale = args.percent / 100.0
+        frame_width = int(video_info['width'] * scale)
+        frame_height = int(video_info['height'] * scale)
+        print(f"等比縮放: {args.percent}% ({frame_width} x {frame_height})")
+        print()
     
     # 建立暫存目錄
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -308,26 +295,135 @@ def main():
         
         if not frames:
             print("錯誤: 未能抽取任何幀")
-            sys.exit(1)
+            return False
         
         print()
         
         # 建立 Sprite Sheet
         metadata = create_spritesheet(
             frames,
-            args.output,
-            frame_width=args.width,
-            frame_height=args.height,
+            output_path,
+            frame_width=frame_width,
+            frame_height=frame_height,
             columns=args.columns,
             remove_bg=args.remove_bg
         )
         
         # 儲存 metadata
         if args.json:
-            save_metadata(metadata, args.output)
+            save_metadata(metadata, output_path)
     
-    print()
-    print("✅ 轉換完成！")
+    return True
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="將影片轉換成 Sprite Sheet 圖集",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+範例:
+  %(prog)s                           # 處理當前資料夾所有影片
+  %(prog)s video.mp4                 # 處理單一影片
+  %(prog)s ./videos/                 # 處理指定資料夾內所有影片
+  %(prog)s video.mp4 -p 50           # 縮放為 50%%
+  %(prog)s video.mp4 -o spritesheet.png -f 15
+  %(prog)s video.mp4 -w 128 -H 128 -c 10
+  %(prog)s video.mp4 --start 0 --end 5 --json
+  %(prog)s video.mp4 --remove-bg -o transparent.png
+        """
+    )
+    
+    parser.add_argument("input", nargs="?", default=".", help="輸入影片檔案或資料夾路徑 (預設: 當前資料夾)")
+    parser.add_argument("-o", "--output", help="輸出檔案名稱或資料夾 (預設: 與影片同名_spritesheet.png)")
+    parser.add_argument("-f", "--fps", type=float, default=10, help="抽取幀率 (預設: 10)")
+    parser.add_argument("-p", "--percent", type=float, help="等比縮放百分比 (例如: 50 表示縮放為 50%%)")
+    parser.add_argument("-w", "--width", type=int, help="每幀寬度 (預設: 保持原始)")
+    parser.add_argument("-H", "--height", type=int, help="每幀高度 (預設: 保持原始)")
+    parser.add_argument("-c", "--columns", type=int, help="每行幾個幀 (預設: 自動計算)")
+    parser.add_argument("--start", type=float, help="起始時間 (秒)")
+    parser.add_argument("--end", type=float, help="結束時間 (秒)")
+    parser.add_argument("--max-frames", type=int, help="最大幀數限制")
+    parser.add_argument("--json", action="store_true", help="輸出 JSON metadata")
+    parser.add_argument("--remove-bg", action="store_true", help="移除背景 (需要安裝 rembg)")
+    
+    args = parser.parse_args()
+    
+    # 檢查輸入路徑
+    input_path = Path(args.input)
+    if not input_path.exists():
+        print(f"錯誤: 找不到輸入路徑 - {input_path}")
+        sys.exit(1)
+    
+    # 檢查 FFmpeg
+    check_ffmpeg()
+    
+    # 檢查 rembg
+    if args.remove_bg and not REMBG_AVAILABLE:
+        print("錯誤: 使用 --remove-bg 需要安裝 rembg")
+        print("執行以下其中一個指令:")
+        print('  pip install "rembg[cpu]"    # CPU 版本')
+        print('  pip install "rembg[gpu]"    # GPU 版本 (需要 NVIDIA/CUDA)')
+        sys.exit(1)
+    
+    # 判斷輸入是檔案還是資料夾
+    if input_path.is_file():
+        # 單一檔案模式
+        video_files = [input_path]
+    else:
+        # 資料夾模式：搜尋所有影片檔案
+        video_files = find_video_files(input_path)
+        if not video_files:
+            print(f"在 {input_path} 中找不到任何影片檔案")
+            print(f"支援的格式: {', '.join(sorted(VIDEO_EXTENSIONS))}")
+            sys.exit(1)
+        print(f"找到 {len(video_files)} 個影片檔案")
+        print()
+    
+    # 處理每個影片
+    success_count = 0
+    fail_count = 0
+    
+    for i, video_path in enumerate(video_files, 1):
+        if len(video_files) > 1:
+            print(f"{'='*60}")
+            print(f"[{i}/{len(video_files)}] 處理: {video_path.name}")
+            print(f"{'='*60}")
+        
+        # 決定輸出檔名
+        if args.output:
+            if len(video_files) == 1:
+                output_path = args.output
+            else:
+                # 多檔案模式：output 視為資料夾或前綴
+                output_dir = Path(args.output)
+                if output_dir.suffix == "":
+                    # 視為資料夾
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                    output_path = str(output_dir / f"{video_path.stem}_spritesheet.png")
+                else:
+                    # 視為前綴
+                    output_path = f"{video_path.stem}_{args.output}"
+        else:
+            # 預設輸出檔名：與影片同名
+            output_path = str(video_path.parent / f"{video_path.stem}_spritesheet.png")
+        
+        # 處理影片
+        if process_single_video(video_path, output_path, args):
+            success_count += 1
+            print()
+            print("✅ 轉換完成！")
+        else:
+            fail_count += 1
+            print()
+            print("❌ 轉換失敗！")
+        
+        print()
+    
+    # 顯示總結
+    if len(video_files) > 1:
+        print(f"{'='*60}")
+        print(f"處理完成！成功: {success_count}, 失敗: {fail_count}")
+        print(f"{'='*60}")
 
 
 if __name__ == "__main__":

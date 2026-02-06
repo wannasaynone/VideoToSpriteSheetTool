@@ -32,21 +32,27 @@
 ### 基本使用
 
 ```bash
+# 處理當前資料夾內所有影片（預設行為）
+python video_to_spritesheet.py
+
+# 處理單一影片
 python video_to_spritesheet.py input.mp4
 ```
 
-這會以預設設定（每秒 10 幀）將影片轉換為 `spritesheet.png`。
+直接執行程式會自動遍歷當前資料夾內的所有影片檔，並為每個影片產生對應的 Sprite Sheet。
 
 ### 完整參數
 
 ```bash
-python video_to_spritesheet.py input.mp4 [選項]
+python video_to_spritesheet.py [input] [選項]
 ```
 
 | 參數 | 說明 | 預設值 |
 |------|------|--------|
-| `-o`, `--output` | 輸出檔案名稱 | `spritesheet.png` |
+| `input` | 輸入影片檔案或資料夾路徑 | 當前資料夾 `.` |
+| `-o`, `--output` | 輸出檔案名稱或資料夾 | `影片名_spritesheet.png` |
 | `-f`, `--fps` | 抽取幀率 | `10` |
+| `-p`, `--percent` | 等比縮放百分比 | 保持原始 |
 | `-w`, `--width` | 每幀寬度（像素） | 保持原始 |
 | `-H`, `--height` | 每幀高度（像素） | 保持原始 |
 | `-c`, `--columns` | 每行幾個幀 | 自動計算 |
@@ -54,12 +60,25 @@ python video_to_spritesheet.py input.mp4 [選項]
 | `--end` | 結束時間（秒） | 到結尾 |
 | `--max-frames` | 最大幀數限制 | 無限制 |
 | `--json` | 輸出 JSON metadata | 否 |
+| `--remove-bg` | 移除背景（需安裝 rembg） | 否 |
 
 ### 使用範例
 
 ```bash
-# 基本轉換
+# 處理當前資料夾所有影片
+python video_to_spritesheet.py
+
+# 處理指定資料夾內所有影片
+python video_to_spritesheet.py ./videos/
+
+# 處理單一影片
 python video_to_spritesheet.py myvideo.mp4
+
+# 等比縮放為 50%
+python video_to_spritesheet.py myvideo.mp4 -p 50
+
+# 處理所有影片並縮放為 25%
+python video_to_spritesheet.py -p 25
 
 # 自訂輸出檔名和幀率
 python video_to_spritesheet.py myvideo.mp4 -o output.png -f 15
@@ -84,6 +103,9 @@ python video_to_spritesheet.py myvideo.mp4 --json
 
 # 組合使用
 python video_to_spritesheet.py myvideo.mp4 -o sprite.png -f 12 -w 64 -H 64 -c 8 --json
+
+# 處理所有影片並輸出到指定資料夾
+python video_to_spritesheet.py ./videos/ -o ./output/ -p 50 --json
 ```
 
 ## 輸出說明
