@@ -162,9 +162,19 @@ def create_spritesheet(frames, output_path, frame_width=None, frame_height=None,
         cols = columns
         rows = math.ceil(num_frames / cols)
     else:
-        # 自動計算最佳排列（接近正方形）
-        cols = math.ceil(math.sqrt(num_frames))
-        rows = math.ceil(num_frames / cols)
+        # 自動計算最佳排列：偶數 x 偶數正方形
+        n = math.ceil(math.sqrt(num_frames))
+        if n % 2 != 0:
+            n += 1  # 向上取到偶數
+        cols = n
+        rows = n
+    
+    # 若幀數不足以填滿偶數格子，用最後一幀填滿
+    total_slots = cols * rows
+    if num_frames < total_slots and frames:
+        padding_count = total_slots - num_frames
+        frames = list(frames) + [frames[-1]] * padding_count
+        print(f"幀數 {num_frames} 不足 {cols}x{rows}={total_slots} 格，以最後一幀填補 {padding_count} 格")
     
     # 建立 Sprite Sheet
     sheet_width = cols * target_width
@@ -223,7 +233,7 @@ def create_spritesheet(frames, output_path, frame_width=None, frame_height=None,
         })
         
         # 顯示進度
-        progress = (i + 1) / num_frames * 100
+        progress = (i + 1) / len(frames) * 100
         print(f"\r合成進度: {progress:.1f}%", end="", flush=True)
     
     print()  # 換行
